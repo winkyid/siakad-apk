@@ -3,36 +3,64 @@ name: Build APK from Web
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Template Project
-        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          repository: 'ShoukoCoder/WebToApp-Template'
+          node-version: 20
 
-      - name: Set up JDK 17
+      - name: Set up Java JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Configure App Details & Assets
+      - name: Install Bubblewrap CLI
+        run: npm install -g @bubblewrap/cli
+
+      - name: Download App Icon
         run: |
-          # Unduh Ikon Aplikasi
-          curl -s -L "https://siakad.umpalangkaraya.ac.id/krs/images/Graphic-3.png" -o app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-          cp app/src/main/res/mipmap-xxxhdpi/ic_launcher.png app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
-          
-          # Konfigurasi URL Website di File Strings / Configuration
-          sed -i 's|https://example.com|https://siakad.umpalangkaraya.ac.id/krs/login.html|g' app/src/main/res/values/strings.xml || true
+          mkdir -p assets
+          curl -s -L "https://siakad.umpalangkaraya.ac.id/krs/images/Graphic-3.png" -o assets/icon.png
 
-      - name: Grant Execute Permission for Gradle
-        run: chmod +x gradlew
+      - name: Generate Manifest and Build APK
+        run: |
+          # Buat manifest PWA sederhana
+          cat <<EOF > manifest.json
+          {
+            "name": "SIAKAD UMP",
+            "short_name": "SIAKAD",
+            "start_url": "https://siakad.umpalangkaraya.ac.id/krs/login.html",
+            "display": "standalone",
+            "background_color": "#ffffff",
+            "theme_color": "#ffffff",
+            "icons": [
+              {
+                "src": "assets/icon.png",
+                "sizes": "512x512",
+                "type": "image/png"
+              }
+            ]
+          }
+          EOF
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
+          # Inisialisasi proyek Bubblewrap tanpa prompt interaktif
+          bubblewrap init --manifest=manifest.json
+
+          # Build APK
+          bubblewrap build
+
+      - name: Find and Rename APK
+        run: |
+          mkdir -p output
+          cp *.apk output/siakad-ump.apk || cp app-release-unsigned.apk output/siakad-ump.apk
 
       - name: Create Release and Upload APK
         uses: softprops/action-gh-release@v2
@@ -41,7 +69,7 @@ jobs:
           name: SIAKAD UMP Release v1.0.${{ github.run_number }}
           body: |
             APK SIAKAD UM Palangkaraya berhasil di-build.
-            URL Target: https://siakad.umpalangkaraya.ac.id/krs/login.html
-          files: app/build/outputs/apk/debug/app-debug.apk
+            URL: https://siakad.umpalangkaraya.ac.id/krs/login.html
+          files: output/siakad-ump.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
